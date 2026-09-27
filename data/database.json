@@ -48,7 +48,7 @@
       "price": 8499,
       "originalPrice": 10999,
       "discountPercentage": 23,
-      "stock": 11,
+      "stock": 10,
       "description": "An authentic Yeola handloom masterpiece adorned with a glorious Peacock (Mor) and floral vase (Kaldar) pallu woven in genuine gold tissue zari. Intricate peacock buttis shimmer across the rich lustrous body.",
       "fabric": "100% Pure Mulberry Silk",
       "sareeLength": "6.3 meters (including 0.8m running blouse piece)",
@@ -504,6 +504,42 @@
     }
   ],
   "orders": [
+    {
+      "items": [
+        {
+          "productId": "prod-1",
+          "name": "Royal Yeola Paithani Saree",
+          "slug": "royal-yeola-paithani-saree",
+          "price": 8499,
+          "quantity": 1,
+          "selectedColor": "Purple",
+          "image": "https://res.cloudinary.com/qudcaa6j/image/upload/v1790405329/virasat_sarees/purple_paithani.jpg"
+        }
+      ],
+      "shippingAddress": {
+        "fullName": "Akash Balaso Khot",
+        "phone": "+918862043183",
+        "email": "khotakash30@gmail.com",
+        "addressLine1": "Unchgon kolhapur",
+        "addressLine2": "",
+        "city": "Kolhapur, Maharashtra",
+        "state": "Maharashtra",
+        "pincode": "416004"
+      },
+      "subtotal": 8499,
+      "discount": 0,
+      "shipping": 0,
+      "total": 8499,
+      "paymentMethod": "razorpay",
+      "paymentStatus": "paid",
+      "orderStatus": "Processing",
+      "razorpayOrderId": "order_Th0jjkLMp17TM8",
+      "razorpayPaymentId": "pay_Th0jqjKmMSIT1h",
+      "id": "ord-1790501149832",
+      "orderNumber": "VIR-2026-2157",
+      "createdAt": "2026-09-27T09:25:49.832Z",
+      "updatedAt": "2026-09-27T09:27:32.490Z"
+    },
     {
       "items": [
         {
