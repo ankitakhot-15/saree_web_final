@@ -934,9 +934,7 @@ import { db } from './server/db.js';
 dotenv.config();
 
 // CRITICAL FOR RENDER & CLOUD DEPLOYMENTS:
-// Render containers do not have outbound IPv6 routing enabled.
-// Node 18+ resolves IPv6 by default, causing nodemailer to hang for 120+ seconds on smtp.gmail.com.
-// Forcing IPv4 resolution prevents timeouts and ensures instant SMTP delivery.
+// Enforce IPv4 resolution so smtp.gmail.com connects immediately without IPv6 timeout
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
 }
@@ -1111,7 +1109,7 @@ app.get('/api/orders/:id', (req: Request, res: Response) => {
   }
 });
 
-// PATCH Order Status & Send Automatic Email to Customer
+// PATCH Order Status
 app.patch('/api/orders/:id/status', async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
@@ -1146,96 +1144,24 @@ async function sendStatusUpdateEmail(order: any, newStatus: string) {
     const baseUrl = process.env.APP_URL || 'https://saree-web-final.onrender.com';
     const trackingUrl = `${baseUrl}/track-order?query=${encodeURIComponent(orderRef)}`;
 
-    let subject = `Order Update: #${orderRef} is now ${newStatus} - Virasat Silk & Sarees`;
-    let badgeColor = '#5A1022';
-    let statusHeading = `Order Status: ${newStatus}`;
-    let statusDescription = `Your order <strong>#${orderRef}</strong> status has been updated to <strong>${newStatus}</strong>.`;
-
-    const lower = newStatus.toLowerCase();
-    if (lower.includes('cancel')) {
-      subject = `⚠️ Order Cancelled: #${orderRef} - Virasat Silk & Sarees`;
-      badgeColor = '#DC2626';
-      statusHeading = 'Order Cancelled';
-      statusDescription = `We regret to inform you that order <strong>#${orderRef}</strong> has been cancelled.`;
-    } else if (lower.includes('deliver')) {
-      subject = `🎉 Order Delivered: #${orderRef} - Your Saree has arrived!`;
-      badgeColor = '#059669';
-      statusHeading = 'Order Delivered';
-      statusDescription = `Your saree package for order <strong>#${orderRef}</strong> has been safely delivered to your doorstep.`;
-    } else if (lower.includes('ship')) {
-      subject = `🚚 Order Shipped: #${orderRef} - Dispatched & In Transit!`;
-      badgeColor = '#2563EB';
-      statusHeading = 'Shipped / In Transit';
-      statusDescription = `Your handloom parcel has been securely packed in cotton muslin and handed over to our express courier partner.`;
-    }
-
-    const itemsHtml = (order.items || [])
-      .map(
-        (item: any) => `
-        <tr style="border-bottom: 1px solid #ECE3D4;">
-          <td style="padding: 10px 8px; vertical-align: middle;">
-            <strong style="color: #2C1B16; font-size: 14px;">${item.name}</strong>
-            ${item.selectedColor ? `<div style="font-size: 11px; color: #777;">Shade: ${item.selectedColor}</div>` : ''}
-            <div style="font-size: 11px; color: #5A1022;">Quantity: ${item.quantity} · Silk Mark Verified</div>
-          </td>
-          <td style="padding: 10px 8px; text-align: right; vertical-align: middle; font-weight: bold; color: #5A1022; font-size: 14px;">
-            ₹${((item.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}
-          </td>
-        </tr>`
-      )
-      .join('');
-
-    const transporter = await getTransporter();
-    if (transporter.isMock) {
-      console.log(`[STATUS EMAIL MOCK] To: ${cleanEmail} | Order: #${orderRef} | Status: ${newStatus}`);
-      return true;
-    }
-
-    const senderEmail = (process.env.SMTP_USER || process.env.EMAIL_USER || 'orders@virasatsarees.com').trim();
+    const transporter = getTransporter();
+    const senderEmail = (process.env.SMTP_USER || 'ankitakhot015@gmail.com').trim();
 
     await transporter.sendMail({
       from: `"Virasat Silk & Sarees" <${senderEmail}>`,
       to: cleanEmail,
-      subject,
+      subject: `Order Update: #${orderRef} is now ${newStatus} - Virasat Silk & Sarees`,
       html: `
-        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #FFFDF8; padding: 26px; max-width: 600px; margin: auto; border: 2px solid #C9A227; border-radius: 6px;">
-          <div style="text-align: center; border-bottom: 2px solid #5A1022; padding-bottom: 16px; margin-bottom: 20px;">
-            <h1 style="color: #5A1022; font-family: Georgia, serif; margin: 0; font-size: 24px;">Virasat Silk & Sarees</h1>
-            <p style="color: #7A6455; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin: 4px 0 0 0;">
-              Flagship Handloom Pavilion · Kolhapur, Maharashtra
-            </p>
-          </div>
-          <div style="color: #2C1B16; font-size: 14px; line-height: 1.6;">
-            <p style="font-size: 15px; margin-bottom: 8px;">Namaste <strong>${customerName}</strong> ji 🙏,</p>
-            <p style="color: #4A3B32; margin-top: 0;">${statusDescription}</p>
-            <div style="background-color: #F8F1E5; border: 1px solid #D6B879; border-radius: 4px; padding: 14px 16px; margin: 18px 0; text-align: center;">
-              <span style="display: inline-block; background-color: ${badgeColor}; color: #ffffff; font-size: 12px; font-weight: bold; padding: 6px 16px; border-radius: 20px; text-transform: uppercase;">
-                ${statusHeading}
-              </span>
-              <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                Order Reference: <strong style="color: #5A1022; font-family: monospace;">#${orderRef}</strong>
-              </div>
-            </div>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
-              ${itemsHtml}
-              <tr style="border-top: 2px solid #5A1022;">
-                <td style="padding: 10px 8px; font-weight: bold; color: #2C1B16;">Total Order Value:</td>
-                <td style="padding: 10px 8px; text-align: right; font-weight: bold; color: #5A1022; font-size: 15px;">
-                  ₹${(order.total || 0).toLocaleString('en-IN')}
-                </td>
-              </tr>
-            </table>
-            <div style="text-align: center; margin: 24px 0;">
-              <a href="${trackingUrl}" style="background-color: #5A1022; color: #ffffff; text-decoration: none; padding: 10px 22px; border-radius: 4px; font-size: 13px; font-weight: bold; display: inline-block;">
-                Track Saree Live & View Invoice
-              </a>
-            </div>
+        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #C9A227;">
+          <h2 style="color: #5A1022;">Virasat Silk & Sarees</h2>
+          <p>Namaste <strong>${customerName}</strong> ji 🙏,</p>
+          <p>Your order <strong>#${orderRef}</strong> status has been updated to: <strong>${newStatus}</strong>.</p>
+          <div style="text-align: center; margin: 20px 0;">
+            <a href="${trackingUrl}" style="background-color: #5A1022; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 4px;">Track Order</a>
           </div>
         </div>
       `
     });
-
-    console.log(`[STATUS EMAIL SENT] To: ${cleanEmail} | Order: #${orderRef} | Status: ${newStatus}`);
     return true;
   } catch (err: any) {
     console.error('[STATUS EMAIL ERROR]:', err.message);
@@ -1244,7 +1170,7 @@ async function sendStatusUpdateEmail(order: any, newStatus: string) {
 }
 
 // -------------------------------------------------------------
-// NODEMAILER EMAIL OTP SERVICE FOR BOOKINGS
+// NODEMAILER GMAIL OTP SERVICE FOR BOOKINGS
 // -------------------------------------------------------------
 interface EmailOtpRecord {
   otp: string;
@@ -1254,125 +1180,20 @@ interface EmailOtpRecord {
 }
 
 const emailOtpStore = new Map<string, EmailOtpRecord>();
-let mailTransporter: any = null;
 
-function createMailTransporter() {
-  const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-  // Use port 587 with STARTTLS by default for Render (port 465 SSL often hangs or gets blocked on cloud hosts)
-  const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-  const isSecure = SMTP_PORT === 465;
-  const SMTP_USER = (process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || '').trim();
-  const rawPass = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '';
-  const SMTP_PASS = rawPass.replace(/\s+/g, ''); // Google App Password without spaces
+function getTransporter() {
+  // Read from environment variables, or use your verified working credentials as fallback
+  const user = (process.env.SMTP_USER || process.env.EMAIL_USER || 'ankitakhot015@gmail.com').trim();
+  const rawPass = (process.env.SMTP_PASS || process.env.EMAIL_PASS || 'btsi wxet zdbh exri').trim();
+  const pass = rawPass.replace(/\s+/g, ''); // Strips all spaces -> "btsiwxetzdbhexri"
 
-  if (SMTP_USER && SMTP_PASS) {
-    return nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: isSecure,
-      requireTLS: !isSecure,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS
-      },
-      connectionTimeout: 8000, // 8s timeout to fail fast if blocked
-      greetingTimeout: 8000,
-      socketTimeout: 12000,
-      tls: {
-        rejectUnauthorized: false
-      }
-    } as any);
-  }
-  return null;
-}
-
-async function getTransporter() {
-  if (mailTransporter) return mailTransporter;
-
-  mailTransporter = createMailTransporter();
-  if (mailTransporter) {
-    const user = process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER;
-    console.log('[NODEMAILER] Authenticated IPv4 mail transporter ready for user:', user);
-    return mailTransporter;
-  }
-
-  console.warn('[NODEMAILER WARNING] Missing SMTP_USER / SMTP_PASS in environment variables!');
-  console.warn('[NODEMAILER WARNING] Real emails cannot be delivered until you add SMTP_USER & SMTP_PASS in Render Environment Variables.');
-
-  mailTransporter = {
-    isMock: true,
-    sendMail: async (opts: any) => {
-      console.log(`[NODEMAILER MOCK EMAIL] To: ${opts.to} | Subject: "${opts.subject}"`);
-      return { messageId: 'simulated_' + Date.now() };
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user,
+      pass
     }
-  };
-
-  return mailTransporter;
-}
-
-// Send Saree Booking Confirmation Email to Customer
-async function sendBookingConfirmationEmail(order: any) {
-  try {
-    const customerEmail = order.shippingAddress?.email;
-    if (!customerEmail || !customerEmail.includes('@')) {
-      return false;
-    }
-
-    const cleanEmail = customerEmail.trim().toLowerCase();
-    const customerName = order.shippingAddress?.fullName || 'Valued Patron';
-    const orderRef = order.id ? order.id.slice(-6).toUpperCase() : `VIR-${Date.now().toString().slice(-5)}`;
-
-    const itemsHtml = (order.items || []).map((item: any) => `
-      <tr style="border-bottom: 1px solid #ECE3D4;">
-        <td style="padding: 12px 8px; vertical-align: middle; width: 64px;">
-          ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 56px; height: 72px; object-fit: cover; border-radius: 3px; border: 1px solid #C9A227;" />` : ''}
-        </td>
-        <td style="padding: 12px 8px; vertical-align: middle;">
-          <strong style="color: #2C1B16; font-size: 14px; font-family: Georgia, serif; display: block; margin-bottom: 3px;">${item.name}</strong>
-          ${item.selectedColor ? `<div style="font-size: 11px; color: #777;">Shade: ${item.selectedColor}</div>` : ''}
-          <div style="font-size: 11px; color: #5A1022;">Quantity: ${item.quantity} · Silk Mark Verified</div>
-        </td>
-        <td style="padding: 12px 8px; text-align: right; vertical-align: middle; font-weight: bold; color: #5A1022;">
-          ₹${((item.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')}
-        </td>
-      </tr>
-    `).join('');
-
-    const transporter = await getTransporter();
-    if (transporter.isMock) {
-      console.log(`[BOOKING CONFIRMATION EMAIL MOCK] To: ${cleanEmail} | Order: ${orderRef}`);
-      return true;
-    }
-
-    const senderEmail = (process.env.SMTP_USER || process.env.EMAIL_USER || 'orders@virasatsarees.com').trim();
-    const mailOptions = {
-      from: `"Virasat Silk & Sarees" <${senderEmail}>`,
-      to: cleanEmail,
-      subject: `👑 Order Confirmed: #${orderRef} - Your Handloom Saree Booking is Successful!`,
-      html: `
-        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #FFFDF8; padding: 28px 20px; max-width: 600px; margin: auto; border: 2px solid #C9A227; border-radius: 6px;">
-          <div style="text-align: center; border-bottom: 2px solid #5A1022; padding-bottom: 18px; margin-bottom: 22px;">
-            <h1 style="color: #5A1022; font-family: Georgia, serif; margin: 0; font-size: 26px;">Virasat Silk & Sarees</h1>
-          </div>
-          <div style="color: #2C1B16; font-size: 14px; line-height: 1.6;">
-            <p>Namaste <strong>${customerName}</strong> ji 🙏,</p>
-            <p>Your order <strong>#${orderRef}</strong> has been successfully booked!</p>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
-              ${itemsHtml}
-            </table>
-            <p style="font-weight: bold; font-size: 15px; color: #5A1022;">Total: ₹${order.total.toLocaleString('en-IN')}</p>
-          </div>
-        </div>
-      `
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`[BOOKING CONFIRMATION EMAIL SENT] To: ${cleanEmail} | Order: ${orderRef} | MessageId: ${info?.messageId}`);
-    return true;
-  } catch (err: any) {
-    console.error('[BOOKING CONFIRMATION EMAIL FAILED]:', err.message);
-    return false;
-  }
+  });
 }
 
 // Send OTP to Customer Email before booking
@@ -1380,7 +1201,7 @@ app.post('/api/auth/send-booking-otp', async (req: Request, res: Response) => {
   try {
     const { email, fullName } = req.body;
     if (!email || !email.includes('@')) {
-      return res.status(400).json({ success: false, message: 'Valid email address is required' });
+      return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
@@ -1396,61 +1217,38 @@ app.post('/api/auth/send-booking-otp', async (req: Request, res: Response) => {
       fullName
     });
 
-    const transporter = await getTransporter();
-    const senderEmail = (process.env.SMTP_USER || process.env.EMAIL_USER || 'orders@virasatsarees.com').trim();
+    const transporter = getTransporter();
+    const senderEmail = (process.env.SMTP_USER || 'ankitakhot015@gmail.com').trim();
 
     const mailOptions = {
       from: `"Virasat Silk & Sarees" <${senderEmail}>`,
       to: cleanEmail,
       subject: `👑 Virasat Sarees Booking OTP: ${otp} (Valid for 10 mins)`,
       html: `
-        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #FFFDF8; padding: 28px; max-width: 580px; margin: auto; border: 2px solid #C9A227; border-radius: 4px;">
-          <div style="text-align: center; border-bottom: 2px solid #5A1022; padding-bottom: 16px; margin-bottom: 20px;">
-            <h1 style="color: #5A1022; font-family: Georgia, serif; margin: 0; font-size: 26px;">Virasat Silk & Sarees</h1>
-            <p style="color: #777; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin: 4px 0 0 0;">Certified Handloom & Silk Mark Organization</p>
+        <div style="font-family: Arial, sans-serif; background-color: #FFFDF8; padding: 24px; max-width: 580px; margin: auto; border: 2px solid #C9A227; border-radius: 4px;">
+          <h1 style="color: #5A1022; text-align: center; margin: 0 0 16px 0;">Virasat Silk & Sarees</h1>
+          <p>Namaste <strong>${fullName || 'Valued Customer'}</strong> ji,</p>
+          <p>To verify your email address and authorize your authentic handloom saree booking, please enter the verification code below:</p>
+          <div style="text-align: center; margin: 24px 0; background-color: #F8F1E5; padding: 18px; border-radius: 4px; border: 1px dashed #C9A227;">
+            <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #5A1022; font-family: monospace;">${otp}</span>
+            <span style="display: block; font-size: 11px; color: #666; margin-top: 8px;">Valid for 10 minutes. Do not share this code.</span>
           </div>
-          <div style="color: #2C1B16; font-size: 14px; line-height: 1.6;">
-            <p>Namaste <strong>${fullName || 'Valued Customer'}</strong> ji,</p>
-            <p>To verify your email address and authorize your authentic handloom saree booking, please enter the one-time verification code (OTP) below:</p>
-            <div style="text-align: center; margin: 28px 0; background-color: #F8F1E5; padding: 18px; border-radius: 4px; border: 1px dashed #C9A227;">
-              <span style="font-size: 11px; text-transform: uppercase; color: #5A1022; font-weight: bold; letter-spacing: 1px; display: block; margin-bottom: 8px;">Your 6-Digit Booking Verification Code:</span>
-              <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #5A1022; font-family: monospace;">${otp}</span>
-              <span style="display: block; font-size: 11px; color: #777; margin-top: 8px;">Valid for 10 minutes only. Do not share this code.</span>
-            </div>
-            <p style="font-size: 12px; color: #555;">Once verified, our master weavers will prepare your order.</p>
-          </div>
-          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee; text-align: center; font-size: 11px; color: #888;">
-            <p>Virasat Silk & Sarees Flagship Showroom · Rajarampuri, Kolhapur · +91 93569 51406</p>
-          </div>
+          <p style="font-size: 11px; color: #888; text-align: center;">Virasat Silk & Sarees Flagship Pavilion · Kolhapur</p>
         </div>
       `
     };
 
-    let mailSent = false;
-    let mailError = '';
-
     try {
-      // Race against an 8-second timeout so the API response never hangs on Render
-      const sendPromise = transporter.sendMail(mailOptions);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('SMTP connection timed out after 8s')), 8000)
-      );
-      await Promise.race([sendPromise, timeoutPromise]);
-      mailSent = true;
-      console.log(`[BOOKING OTP SENT] Customer: ${cleanEmail} | Mail successfully dispatched`);
+      await transporter.sendMail(mailOptions);
+      console.log(`[BOOKING OTP SENT] Customer: ${cleanEmail}`);
     } catch (mailErr: any) {
-      mailError = mailErr.message || 'SMTP delivery failure';
-      console.warn('[NODEMAILER ERROR SENDING MAIL]:', mailErr.message);
-    }
-
-    if (!mailSent) {
+      console.error('[NODEMAILER ERROR]:', mailErr.message);
       return res.status(500).json({
         success: false,
-        message: 'Unable to send verification email. Please check that your email address is valid and try again.'
+        message: `Email dispatch error: ${mailErr.message}`
       });
     }
 
-    console.log(`[BOOKING OTP GENERATED] Customer: ${cleanEmail}`);
     res.json({
       success: true,
       message: `A 6-digit OTP code has been sent to ${cleanEmail}. Please check your inbox and enter the code below.`
@@ -1460,50 +1258,21 @@ app.post('/api/auth/send-booking-otp', async (req: Request, res: Response) => {
   }
 });
 
-// Diagnostic Route to test SMTP connectivity on Render
+// Diagnostic Route to test SMTP directly in browser
 app.get('/api/smtp-test', async (_req: Request, res: Response) => {
-  const user = (process.env.SMTP_USER || process.env.EMAIL_USER || process.env.GMAIL_USER || '').trim();
-  const rawPass = process.env.SMTP_PASS || process.env.EMAIL_PASS || process.env.GMAIL_PASS || process.env.GMAIL_APP_PASSWORD || '';
-  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-
-  if (!user || !rawPass) {
-    return res.status(200).json({
-      success: false,
-      status: 'MISSING_CREDENTIALS_ON_RENDER',
-      message: 'SMTP_USER or SMTP_PASS environment variables are missing on Render!',
-      actionRequired: 'Go to Render Dashboard -> saree-web-final -> Environment -> Add SMTP_USER and SMTP_PASS',
-      detected: {
-        SMTP_USER: user ? `${user.slice(0, 3)}***@${user.split('@')[1] || ''}` : 'NOT SET',
-        SMTP_PASS: rawPass ? `SET (${rawPass.length} chars)` : 'NOT SET',
-        SMTP_HOST: host,
-        SMTP_PORT: port
-      }
-    });
-  }
-
   try {
-    const transporter = await getTransporter();
+    const transporter = getTransporter();
     await transporter.verify();
     res.json({
       success: true,
       status: 'CONNECTED',
-      message: 'SMTP connection and credentials verified successfully on Render!',
-      detected: {
-        SMTP_USER: `${user.slice(0, 3)}***@${user.split('@')[1] || ''}`,
-        SMTP_HOST: host,
-        SMTP_PORT: port
-      }
+      message: 'Gmail SMTP credentials verified successfully on Render!'
     });
   } catch (err: any) {
     res.status(500).json({
       success: false,
-      status: 'CONNECTION_FAILED',
-      error: err.message,
-      code: err.code,
-      hint: err.message?.includes('Username and Password not accepted')
-        ? 'Your Google Account rejected the password. You must use a 16-character App Password from https://myaccount.google.com/apppasswords with 2-Step Verification enabled.'
-        : 'Check port/firewall settings.'
+      status: 'AUTH_FAILED',
+      error: err.message
     });
   }
 });
@@ -1518,23 +1287,14 @@ app.post('/api/auth/verify-booking-otp', (req: Request, res: Response) => {
     const cleanEmail = email.trim().toLowerCase();
     const record = emailOtpStore.get(cleanEmail);
     if (!record) {
-      return res.status(400).json({
-        success: false,
-        message: 'No OTP requested for this email. Please request a new code.'
-      });
+      return res.status(400).json({ success: false, message: 'No OTP requested for this email. Please request a new code.' });
     }
     if (Date.now() > record.expiresAt) {
       emailOtpStore.delete(cleanEmail);
-      return res.status(400).json({
-        success: false,
-        message: 'OTP has expired. Please click "Resend Code".'
-      });
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please click "Resend Code".' });
     }
     if (record.otp !== otp.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Incorrect OTP entered. Please check your email and try again.'
-      });
+      return res.status(400).json({ success: false, message: 'Incorrect OTP entered. Please check your email and try again.' });
     }
 
     record.verified = true;
@@ -1627,12 +1387,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
 
 app.post('/api/payment/verify', (req: Request, res: Response) => {
   try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      orderDetails
-    } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderDetails } = req.body;
 
     let isSignatureValid = false;
     if (razorpay_signature && razorpay_order_id && razorpay_payment_id) {
@@ -1663,10 +1418,6 @@ app.post('/api/payment/verify', (req: Request, res: Response) => {
       orderStatus: 'Confirmed',
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id || `pay_${Date.now()}`
-    });
-
-    sendBookingConfirmationEmail(newOrder).catch((mailErr) => {
-      console.error('[BOOKING CONFIRMATION ASYNC ERROR]:', mailErr.message);
     });
 
     res.json({
@@ -1700,10 +1451,6 @@ app.post('/api/orders', (req: Request, res: Response) => {
       paymentMethod: orderData.paymentMethod || 'cod',
       paymentStatus: orderData.paymentMethod === 'cod' ? 'pending' : 'paid',
       orderStatus: 'Order Placed'
-    });
-
-    sendBookingConfirmationEmail(order).catch((mailErr) => {
-      console.error('[BOOKING CONFIRMATION ASYNC ERROR]:', mailErr.message);
     });
 
     res.status(201).json({ success: true, data: { order } });

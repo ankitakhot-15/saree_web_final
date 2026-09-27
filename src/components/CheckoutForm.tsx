@@ -750,7 +750,6 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({
     }
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
-
   const handleSendOtp = async () => {
     if (!formData.email || !formData.email.includes("@")) {
       setOtpMsg({
@@ -761,13 +760,13 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({
     }
     setOtpLoading(true);
     setOtpMsg(null);
-    setOtpCode(""); // Keep input empty so customer enters code manually from email
+    setOtpCode(""); // Keep input empty so customer enters code from email
 
     try {
       const res = await api.sendBookingOtp(formData.email, formData.fullName);
       if (res.success) {
         setOtpSent(true);
-        setOtpCode(""); // Customer MUST check their email and enter manually
+        setOtpCode(""); // Customer MUST check email and enter code manually
         setOtpMsg({
           text: `A 6-digit OTP code has been dispatched to ${formData.email}. Please check your inbox and enter the code below.`,
           type: "success",
@@ -784,6 +783,39 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({
       setOtpLoading(false);
     }
   };
+  // const handleSendOtp = async () => {
+  //   if (!formData.email || !formData.email.includes("@")) {
+  //     setOtpMsg({
+  //       text: "Please enter a valid email address first.",
+  //       type: "error",
+  //     });
+  //     return;
+  //   }
+  //   setOtpLoading(true);
+  //   setOtpMsg(null);
+  //   setOtpCode(""); // Keep input empty so customer enters code manually from email
+
+  //   try {
+  //     const res = await api.sendBookingOtp(formData.email, formData.fullName);
+  //     if (res.success) {
+  //       setOtpSent(true);
+  //       setOtpCode(""); // Customer MUST check their email and enter manually
+  //       setOtpMsg({
+  //         text: `A 6-digit OTP code has been dispatched to ${formData.email}. Please check your inbox and enter the code below.`,
+  //         type: "success",
+  //       });
+  //     } else {
+  //       setOtpMsg({
+  //         text: res.message || "Failed to send OTP. Please try again.",
+  //         type: "error",
+  //       });
+  //     }
+  //   } catch (err: any) {
+  //     setOtpMsg({ text: err.message || "Error sending OTP.", type: "error" });
+  //   } finally {
+  //     setOtpLoading(false);
+  //   }
+  // };
 
   const handleVerifyOtp = async () => {
     if (!otpCode || otpCode.trim().length !== 6) {
